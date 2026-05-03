@@ -1,0 +1,234 @@
+# SmartBoard — Build Plan
+
+> AI-powered Kanban task manager built with Next.js 14, Supabase, and Claude AI.
+
+---
+
+## 📁 Folder Structure
+
+```
+a:\Projects\SmartBoard\
+├── app/
+│   ├── (auth)/
+│   │   ├── login/
+│   │   │   └── page.tsx              # Login page
+│   │   └── signup/
+│   │       └── page.tsx              # Signup page
+│   ├── dashboard/
+│   │   └── page.tsx                  # Protected Kanban board
+│   ├── api/
+│   │   └── generate/
+│   │       └── route.ts              # Claude AI task generation endpoint
+│   ├── globals.css                   # Global styles + Tailwind base
+│   └── layout.tsx                    # Root layout (font, providers)
+├── components/
+│   ├── ui/                           # shadcn/ui auto-generated components
+│   │   ├── button.tsx
+│   │   ├── input.tsx
+│   │   ├── badge.tsx
+│   │   ├── skeleton.tsx
+│   │   └── ...
+│   ├── board/
+│   │   ├── KanbanBoard.tsx           # DnD context + columns layout
+│   │   ├── KanbanColumn.tsx          # Single column (header + droppable)
+│   │   ├── TaskCard.tsx              # Draggable task card
+│   │   ├── AddTaskInput.tsx          # Inline "+ Add Task" input
+│   │   └── TaskDetailPanel.tsx       # Slide-in edit side panel
+│   ├── ai/
+│   │   └── AIInputBar.tsx            # Full-width AI prompt bar
+│   ├── analytics/
+│   │   └── AnalyticsBar.tsx          # Stat pills (Total / Done / In Progress)
+│   ├── auth/
+│   │   ├── LoginForm.tsx
+│   │   └── SignupForm.tsx
+│   └── providers/
+│       └── SupabaseProvider.tsx      # Client-side Supabase session provider
+├── lib/
+│   ├── supabase/
+│   │   ├── client.ts                 # Browser Supabase client
+│   │   └── server.ts                 # Server-side Supabase client (cookies)
+│   ├── types.ts                      # Shared TypeScript types (Task, Priority, Status)
+│   └── utils.ts                      # cn() helper + misc utilities
+├── hooks/
+│   ├── useTasks.ts                   # Fetch, optimistic update, reorder tasks
+│   └── useAnalytics.ts               # Derived stats from task list
+├── middleware.ts                     # Supabase auth guard → redirect to /login
+├── .env.local                        # Secret env vars (gitignored)
+├── .env.example                      # Documented keys, no values
+├── .gitignore
+├── vercel.json
+├── README.md
+├── next.config.ts
+├── tailwind.config.ts
+├── tsconfig.json
+└── package.json
+```
+
+---
+
+## 📦 Dependencies
+
+### Runtime
+| Package | Purpose |
+|---|---|
+| `next@14` | App Router framework |
+| `react`, `react-dom` | UI runtime |
+| `typescript` | Type safety |
+| `tailwindcss`, `postcss`, `autoprefixer` | Styling |
+| `@supabase/supabase-js` | Supabase client |
+| `@supabase/ssr` | SSR-safe auth helpers |
+| `@anthropic-ai/sdk` | Claude API client |
+| `@hello-pangea/dnd` | Drag & drop |
+| `framer-motion` | Animations |
+| `class-variance-authority` | shadcn/ui variant utility |
+| `clsx` | Conditional class names |
+| `tailwind-merge` | Merge Tailwind classes safely |
+| `lucide-react` | Icons |
+| `date-fns` | Date formatting |
+| `zod` | Request body validation |
+
+### Dev
+| Package | Purpose |
+|---|---|
+| `@types/react`, `@types/node` | Type definitions |
+| `eslint`, `eslint-config-next` | Linting |
+
+### shadcn/ui Components to install
+`button`, `input`, `textarea`, `badge`, `skeleton`, `separator`, `dialog`, `sheet`, `tooltip`
+
+---
+
+## 🗄️ Database Schema (Supabase PostgreSQL)
+
+### Table: `tasks`
+
+```sql
+create table public.tasks (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null references auth.users(id) on delete cascade,
+  title       text not null,
+  description text,
+  status      text not null default 'todo'
+                check (status in ('todo', 'inprogress', 'done')),
+  priority    text not null default 'medium'
+                check (priority in ('high', 'medium', 'low')),
+  position    integer not null default 0,
+  created_at  timestamptz not null default now()
+);
+
+-- Indexes
+create index tasks_user_id_idx on public.tasks(user_id);
+create index tasks_status_idx  on public.tasks(status);
+
+-- Row Level Security
+alter table public.tasks enable row level security;
+
+create policy "Users can manage their own tasks"
+  on public.tasks
+  for all
+  using  (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+```
+
+---
+
+## 🏗️ Build Order
+
+### Step 1 — Project Scaffold
+- Init Next.js 14 with TypeScript + Tailwind in `a:\Projects\SmartBoard`
+- Configure `tailwind.config.ts` with SmartBoard color palette
+- Set up `tsconfig.json` paths alias (`@/`)
+- Create `.env.example` and `.env.local` (user fills values)
+- Add `.gitignore`
+
+### Step 2 — Supabase Setup
+- Install `@supabase/supabase-js` + `@supabase/ssr`
+- Create `lib/supabase/client.ts` and `lib/supabase/server.ts`
+- Create `providers/SupabaseProvider.tsx` for session context
+- Configure `middleware.ts` to protect `/dashboard` route
+- Wire layout with provider
+
+### Step 3 — Auth Pages
+- Build `LoginForm.tsx` and `SignupForm.tsx` with Supabase email/password auth
+- Create `/login` and `/signup` pages with branded UI
+- Handle redirect after login → `/dashboard`
+- Show loading/error states
+
+### Step 4 — Shared Types & Utilities
+- Define `Task`, `Status`, `Priority` TypeScript types in `lib/types.ts`
+- Add `cn()` utility helper in `lib/utils.ts`
+- Install and configure shadcn/ui components
+
+### Step 5 — Task Data Layer
+- Build `useTasks.ts` hook: fetch all tasks, create, update, delete, reorder
+- All mutations use **optimistic updates** for instant UI feedback
+- Implement position recalculation logic on drag-drop reorder
+
+### Step 6 — Kanban Board UI
+- `KanbanBoard.tsx`: DragDropContext wrapping three columns
+- `KanbanColumn.tsx`: Droppable area, column header with count badge, top-border color
+- `TaskCard.tsx`: Draggable card — title, description preview, priority badge, date
+- `AddTaskInput.tsx`: Inline input shown on "+ Add Task" click
+- Empty state: dashed border + helpful prompt text
+- Skeleton loader shown before data arrives
+
+### Step 7 — Task Detail Side Panel
+- `TaskDetailPanel.tsx`: Sheet/drawer component (slides in from right)
+- Editable: title, description (textarea), priority selector
+- Delete button with confirmation
+- Auto-saves on blur / explicit Save button
+
+### Step 8 — AI Input Bar
+- `AIInputBar.tsx`: Full-width bar at top of dashboard
+- POST to `/api/generate` with user's prompt
+- Show "AI is breaking this down..." loading state
+- On response: stagger-animate tasks into To Do column via Framer Motion
+- `/api/generate/route.ts`: Validate input → call Claude SDK → parse JSON → bulk-insert tasks → return tasks
+
+### Step 9 — Analytics Bar
+- `AnalyticsBar.tsx`: Derive stats from task list (no extra DB call)
+- Three animated pills: Total Tasks / Completed Today / In Progress
+- Values update instantly as user moves cards
+
+### Step 10 — Polish & Final Files
+- Page-level Framer Motion layout transitions
+- Drag state: card rotation + drop shadow
+- Responsive layout (mobile: single column scroll)
+- Add `vercel.json`
+- Write `README.md`
+- Final audit of all colors, spacing, animations
+
+### Step 11 — Git & Deploy
+- `git init` → stage all files → `git commit -m "feat: SmartBoard initial build"`
+- `vercel --prod` (user runs with their env vars set in Vercel dashboard)
+
+---
+
+## ⚙️ Environment Variables
+
+```bash
+# .env.example
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+ANTHROPIC_API_KEY=
+```
+
+> [!IMPORTANT]
+> The user must create a Supabase project, run the SQL schema above in the Supabase SQL editor, and paste their keys into `.env.local` before starting the dev server.
+
+---
+
+## ✅ Done Checklist
+
+- [ ] Login / Signup works (Supabase Auth)
+- [ ] Dashboard is protected (middleware redirect)
+- [ ] Kanban board renders with skeleton loading
+- [ ] Drag & drop moves tasks between columns
+- [ ] "+ Add Task" inline input works
+- [ ] Task detail side panel — edit & delete
+- [ ] AI input bar generates and animates tasks
+- [ ] Analytics bar updates in real-time
+- [ ] `.env.example` committed, `.env.local` gitignored
+- [ ] `README.md` and `vercel.json` present
+- [ ] Single git commit: `feat: SmartBoard initial build`
+- [ ] Deployed on Vercel with live URL
